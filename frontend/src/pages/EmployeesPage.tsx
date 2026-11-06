@@ -143,9 +143,16 @@ export default function EmployeesPage() {
     let authUserId = null;
 
     if (formData.create_auth_user && formData.email && formData.password) {
+      // signUp may auto sign-in the new user — preserve our session first
+      const { data: sessionData } = await supabase.auth.getSession();
+      const prevSession = sessionData.session;
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: { role: 'employee' },
+        },
       });
 
       if (authError) {
@@ -153,6 +160,14 @@ export default function EmployeesPage() {
         alert(`Could not create login account: ${authError.message}. Employee will be saved without a login account.`);
       } else {
         authUserId = authData.user?.id;
+
+        // Restore admin session if signUp switched users
+        if (prevSession && authData.session) {
+          await supabase.auth.setSession({
+            access_token: prevSession.access_token,
+            refresh_token: prevSession.refresh_token,
+          });
+        }
 
         if (authData.user) {
           const { error: membershipError } = await supabase.from('company_memberships').insert({

@@ -147,6 +147,11 @@ export default function CompaniesPage() {
     setMemberSubmitting(true);
 
     try {
+      // signUp may auto sign-in the new user and replace our session —
+      // capture current session so we can restore it before RLS inserts
+      const { data: sessionData } = await supabase.auth.getSession();
+      const prevSession = sessionData.session;
+
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: memberForm.email.trim(),
         password: memberForm.password,
@@ -162,6 +167,17 @@ export default function CompaniesPage() {
 
       const authUser = signUpData.user;
       if (!authUser) throw new Error('No user returned from sign up');
+
+      // Restore original admin session if signUp switched users
+      if (prevSession && signUpData.session) {
+        const { error: restoreError } = await supabase.auth.setSession({
+          access_token: prevSession.access_token,
+          refresh_token: prevSession.refresh_token,
+        });
+        if (restoreError) {
+          console.error('Failed to restore session:', restoreError);
+        }
+      }
 
       const { error: memberError } = await supabase.from('company_memberships').insert({
         user_id: authUser.id,
@@ -187,7 +203,12 @@ export default function CompaniesPage() {
       setMemberForm({ name: '', email: '', password: '', role: 'admin' });
       await openMembers(membersFor);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error creating member';
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err && 'message' in err
+            ? String((err as { message: string }).message)
+            : 'Error creating member';
       alert(msg);
     } finally {
       setMemberSubmitting(false);
