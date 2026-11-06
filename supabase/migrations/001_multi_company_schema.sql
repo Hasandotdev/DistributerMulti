@@ -166,10 +166,12 @@ security definer
 stable
 as $$
   select coalesce(
-    array_agg(cm.company_id)
-    from company_memberships cm
-    where cm.user_id = p_user_id
-      and cm.is_active = true,
+    (
+      select array_agg(cm.company_id)
+      from company_memberships cm
+      where cm.user_id = p_user_id
+        and cm.is_active = true
+    ),
     '{}'::uuid[]
   );
 $$;
@@ -217,12 +219,14 @@ security definer
 stable
 as $$
   select coalesce(
-    array_agg(distinct er.route_id)
-    from employee_routes er
-    join employees e on e.id = er.employee_id
-    where e.auth_user_id = p_user_id
-      and e.is_active = true
-      and user_has_company_access(p_user_id, er.company_id),
+    (
+      select array_agg(distinct er.route_id)
+      from employee_routes er
+      join employees e on e.id = er.employee_id
+      where e.auth_user_id = p_user_id
+        and e.is_active = true
+        and user_has_company_access(p_user_id, er.company_id)
+    ),
     '{}'::uuid[]
   );
 $$;
