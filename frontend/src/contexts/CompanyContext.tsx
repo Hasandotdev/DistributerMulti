@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Company } from '@/types/database';
 
 const ACTIVE_COMPANY_KEY = 'activeCompanyId';
@@ -17,6 +18,9 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
   const [companies, setCompanies] = useState<Company[]>([]);
   const [activeCompany, setActiveCompanyState] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,23 +54,22 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     applyActive(list);
   }, [applyActive]);
 
+  // Reload companies whenever the signed-in user changes
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
+      if (!userId) {
         if (!cancelled) {
           setCompanies([]);
           setActiveCompanyState(null);
+          localStorage.removeItem(ACTIVE_COMPANY_KEY);
           setLoading(false);
         }
         return;
       }
 
+      setLoading(true);
       await refreshCompanies();
       if (!cancelled) setLoading(false);
     }
@@ -75,7 +78,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshCompanies]);
+  }, [userId, refreshCompanies]);
 
   function switchCompany(companyId: string) {
     const found = companies.find((c) => c.id === companyId);
